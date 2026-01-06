@@ -29,20 +29,16 @@ void Bottom::draw(glm::mat4 const &view_mat, glm::mat4 const &projection_mat) {
     shader.setMat4("view", view_mat);
     shader.setMat4("projection", projection_mat);
 
-    float angle = glm::radians(90.0f);
-    glm::vec3 axis(1.0f, 0.0f, 0.0f);
-    auto min = model.min_vertex * scale_factor;
-    glm::mat4 rotMat = glm::rotate(glm::mat4(1.0f), angle, axis);
-    glm::vec4 rotated = rotMat * glm::vec4(min, 0.0f);
-    min = glm::vec3(rotated);
+    constexpr float angle = glm::radians(90.0f);
+    constexpr glm::vec3 axis(1.0f, 0.0f, 0.0f);
 
     for (const glm::vec3 &basePos: positions) {
-        auto pos = basePos + min;
 
         glm::mat4 model_mat(1.0f);
-        model_mat = glm::translate(model_mat, pos);
+        model_mat = glm::translate(model_mat, basePos);
         model_mat = glm::rotate(model_mat, angle, axis);
         model_mat = glm::scale(model_mat, glm::vec3(scale_factor));
+        model_mat = glm::translate(model_mat, model.min_vertex);
 
         shader.setMat4("model", model_mat);
         model.Draw(shader);
