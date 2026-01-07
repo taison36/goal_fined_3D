@@ -13,7 +13,7 @@
 
 #include "Player.h"
 #include "Bottom.h"
-
+#include "Wall.h"
 
 
 constexpr int WIDTH = 1024;
@@ -26,15 +26,18 @@ float last_y = static_cast<float>(HEIGHT) / 2;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
-Player player(glm::vec3(0.0f, 0.0f, 0.0f));
+Player player(glm::vec3(0.0f, 2.0f, 0.0f));
 
 std::string light_vert_path = "../src/shaders/light_cube.vert";
 std::string light_frag_path = "../src/shaders/light_cube.frag";
 std::string color_vert_path = "../src/shaders/colors.vert";
 std::string color_frag_path = "../src/shaders/colors.frag";
 
-std::string backpack_vertex_path = "../src/shaders/backpack.vert";
-std::string backpack_fragment_path = "../src/shaders/backpack.frag";
+std::string bottom_vertex_path = "../src/shaders/bottom.vert";
+std::string bottom_fragment_path = "../src/shaders/bottom.frag";
+
+std::string wall_vertex_path = "../src/shaders/wall.vert";
+std::string wall_fragment_path = "../src/shaders/wall.frag";
 
 void framebufferSizeCallback(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -109,7 +112,7 @@ void scrollCallback(GLFWwindow *window, double xoffset, double yoffset) {
 
 void displayFPS(double dt, GLFWwindow &window) {
     const double fps = 1.0 / dt;
-    std::string title = std::string("LearnOpenGL - FPS: ") + std::to_string(static_cast<int>(fps));
+    std::string title = std::string("Tykhon - 3D Renderer - FPS: ") + std::to_string(static_cast<int>(fps));
     glfwSetWindowTitle(&window, title.c_str());
 }
 
@@ -122,7 +125,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT,GL_TRUE);
 #endif
 
-    GLFWwindow *window = glfwCreateWindow(800, 600, "LearnOpenGL", nullptr, nullptr);
+    GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "3D-Renderer", nullptr, nullptr);
     if (window == nullptr) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -144,21 +147,37 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
-    std::vector<glm::vec3> floorPositions;
+    std::vector<glm::vec3> floorPositions{
+        glm::vec3(0.0f),
+        glm::vec3(-8.0f, 0.0f, 0.0f)
+    };
 
-    int width = 5; // плитки по X
-    int depth = 5; // плитки по Z
+    std::vector<glm::vec3> wall_positions_0{
+        glm::vec3(0.0f, -0.1f, 0.0f),
+        glm::vec3(-8.0f, -0.1f, 0.0f)
+    };
 
-    for (int x = 0; x < width; ++x) {
-        for (int z = 0; z < depth; ++z) {
-            floorPositions.push_back(glm::vec3(float(x * 4.0f), 0.0f, float(z * 4.0f)));
-        }
-    }
+    std::vector<glm::vec3> wall_positions_1{
+        glm::vec3(0.0f, -0.1f, 0.0f)
+    };
+
+    std::vector<glm::vec3> wall_positions_2{
+        glm::vec3(0.0f, -0.1f, -8.0f),
+        glm::vec3(-8.0f, -0.1f, -8.0f)
+    };
+
+    std::vector<glm::vec3> wall_positions_3{
+        glm::vec3(-8.0f, -0.1f, 0.0f)
+    };
 
     Bottom bottom(floorPositions,
                   "../resources/checkered_tile_floor.glb",
-                  backpack_vertex_path,
-                  backpack_fragment_path);
+                  bottom_vertex_path,
+                  bottom_fragment_path);
+
+     Wall wall("../resources/backpack/backpack.obj",
+               wall_vertex_path,
+               wall_fragment_path);
 
     // main loop
     double last_time = glfwGetTime();
@@ -177,7 +196,7 @@ int main() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        player.updatePlayer(bottom.getCommonY());
+        //player.updatePlayer(bottom.getCommonY());
 
         glm::mat4 view = player.getView();
         glm::mat4 projection = glm::perspective(glm::radians(player.getZoom()),
@@ -186,7 +205,16 @@ int main() {
                                                 100.0f);
 
 
-        bottom.draw(view, projection);
+        //bottom.draw(view, projection);
+
+         wall.draw(view, projection, {glm::vec3(0.0f)}, 1, glm::vec3(0.1f, 0.0f, 0.0f));
+
+        // wall.draw(view, projection, wall_positions_0, 90, glm::vec3(1.0f, 0.0f, 0.0f));
+        // wall.draw(view, projection, wall_positions_2, 90, glm::vec3(1.0f, 0.0f, 0.0f));
+        //
+        // wall.draw(view, projection, wall_positions_1, 0, glm::vec3(0.0f, 0.0f, 0.0f));
+        // wall.draw(view, projection, wall_positions_3, 0, glm::vec3(0.0f, 0.0f, 0.0f));
+
 
         glfwSwapBuffers(window);
     }

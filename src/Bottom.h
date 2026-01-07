@@ -6,7 +6,7 @@
 #define BOTTOM_H
 #include "util/Model.h"
 
-constexpr float DEFAULT_SIZE = 4.0f;
+constexpr float DEFAULT_SIZE = 8.0f;
 
 class Bottom {
     Model model;

@@ -27,6 +27,8 @@ add_executable(${PROJECT_NAME}
         src/Player.cpp
         src/Bottom.cpp
         src/Bottom.h
+        src/Wall.h
+        src/Wall.cpp
         src/main.cpp
         src/thirdparty/stb_image/stb.cpp
         src/thirdparty/glad/glad.c

@@ -17,10 +17,7 @@ void Player::updateCameraVectors() {
 }
 
 void Player::updatePlayer(float floor_y) {
-    float bottom = position.y - height * 0.5f;
-    if (bottom < floor_y) {
-        position.y = floor_y + height * 0.5f;
-    }
+    position.y = floor_y + height * 0.5f;
 }
 
 float Player::getZoom() {
