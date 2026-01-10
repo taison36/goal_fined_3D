@@ -8,12 +8,15 @@
 #include <string>
 #include <fstream>
 
+#include "physics/CheckpointPhysics.h"
 #include "thirdparty/stb_image/stb_image.h"
 #include "thirdparty/glad/glad.h"
 
-#include "Player.h"
-#include "Bottom.h"
-#include "Wall.h"
+#include "render/Player.h"
+#include "render/Bottom.h"
+#include "render/WallRender.h"
+#include "render/AffineTransform.h"
+#include "render/CheckpointRender.h"
 
 
 constexpr int WIDTH = 1024;
@@ -26,7 +29,7 @@ float last_y = static_cast<float>(HEIGHT) / 2;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
-Player player(glm::vec3(0.0f, 2.0f, 0.0f));
+Player player(glm::vec3(-4.0f, 2.0f, -4.0f));
 
 std::string light_vert_path = "../src/shaders/light_cube.vert";
 std::string light_frag_path = "../src/shaders/light_cube.frag";
@@ -76,25 +79,25 @@ unsigned int loadTexture(char const *path) {
     return textureID;
 }
 
-void processInput(GLFWwindow *window, float delta_time) {
+void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     }
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        player.processCameraPositionMovement(FORWARD, delta_time);
+        player.processCameraPositionMovement(FORWARD);
     }
 
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        player.processCameraPositionMovement(BACKWARD, delta_time);
+        player.processCameraPositionMovement(BACKWARD);
     }
 
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        player.processCameraPositionMovement(LEFT, delta_time);
+        player.processCameraPositionMovement(LEFT);
     }
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        player.processCameraPositionMovement(RIGHT, delta_time);
+        player.processCameraPositionMovement(RIGHT);
     }
 }
 
@@ -152,32 +155,76 @@ int main() {
         glm::vec3(-8.0f, 0.0f, 0.0f)
     };
 
-    std::vector<glm::vec3> wall_positions_0{
-        glm::vec3(0.0f, -0.1f, 0.0f),
-        glm::vec3(-8.0f, -0.1f, 0.0f)
+    std::vector<AffineTransform> affine_transforms{
+        AffineTransform(
+            glm::vec3(-4.0f, 1.9f, 0.0f),
+            glm::vec3(90.0f, 0.0f, 0.0f),
+            glm::vec3(0.829228f)
+        ),
+        AffineTransform(
+            glm::vec3(-12.0f, 1.9f, 0.0f),
+            glm::vec3(90.0f, 0.0f, 0.0f),
+            glm::vec3(0.829228f)
+        ),
+        AffineTransform(
+            glm::vec3(-4.0f, 1.9f, -8.0f),
+            glm::vec3(90.0f, 0.0f, 0.0f),
+            glm::vec3(0.829228f)
+        ),
+        AffineTransform(
+            glm::vec3(-12.0f, 1.9f, -8.0f),
+            glm::vec3(90.0f, 0.0f, 0.0f),
+            glm::vec3(0.829228f)
+        ),
+        AffineTransform(
+            glm::vec3(-16.0f, 1.9f, -4.0f),
+            glm::vec3(90.0f, 0.0f, 90.0f),
+            glm::vec3(0.829228f)
+        ),
+        AffineTransform(
+            glm::vec3(0.0f, 1.9f, -4.0f),
+            glm::vec3(90.0f, 0.0f, 90.0f),
+            glm::vec3(0.829228f)
+        )
     };
-
-    std::vector<glm::vec3> wall_positions_1{
-        glm::vec3(0.0f, -0.1f, 0.0f)
-    };
-
-    std::vector<glm::vec3> wall_positions_2{
-        glm::vec3(0.0f, -0.1f, -8.0f),
-        glm::vec3(-8.0f, -0.1f, -8.0f)
-    };
-
-    std::vector<glm::vec3> wall_positions_3{
-        glm::vec3(-8.0f, -0.1f, 0.0f)
-    };
-
     Bottom bottom(floorPositions,
                   "../resources/checkered_tile_floor.glb",
                   bottom_vertex_path,
                   bottom_fragment_path);
 
-     Wall wall("../resources/backpack/backpack.obj",
-               wall_vertex_path,
-               wall_fragment_path);
+    WallRender wall_render("../resources/grungy_brick_wall.glb",
+                           wall_vertex_path,
+                           wall_fragment_path);
+
+
+    stbi_set_flip_vertically_on_load(false);
+
+    CheckpointRender checkpoint_render("../resources/bfbbr_-_checkpoint.glb",
+                                       wall_vertex_path,
+                                       wall_fragment_path);
+
+
+    AABB room_aabb (
+        glm::vec3(-1.0f, 0.5f, -1.0f),
+        glm::vec3(-10.0f, 0.5f, -7.0f)
+        );
+
+    CheckpointPhysics checkpoint_physics(AffineTransform(
+                                             glm::vec3(-3.0f, 0.5f, -3.0f),
+                                             glm::vec3(0.0f),
+                                             glm::vec3(0.2f)
+                                         ),
+                                         checkpoint_render.getAABB(),
+                                         room_aabb
+    );
+
+    std::vector<WallPhysics> wall_physicses;
+    wall_physicses.reserve(affine_transforms.size());
+
+    for (auto const &affine_transform: affine_transforms) {
+        wall_physicses.emplace_back(affine_transform, wall_render.getAABB());
+    }
+
 
     // main loop
     double last_time = glfwGetTime();
@@ -191,12 +238,12 @@ int main() {
         } else {
             continue;
         }
-        processInput(window, dt);
+        processInput(window);
 
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        //player.updatePlayer(bottom.getCommonY());
+        player.updatePlayer(bottom.getCommonY(), dt, wall_physicses, checkpoint_physics);
 
         glm::mat4 view = player.getView();
         glm::mat4 projection = glm::perspective(glm::radians(player.getZoom()),
@@ -205,16 +252,11 @@ int main() {
                                                 100.0f);
 
 
-        //bottom.draw(view, projection);
+        bottom.draw(view, projection);
 
-         wall.draw(view, projection, {glm::vec3(0.0f)}, 1, glm::vec3(0.1f, 0.0f, 0.0f));
+        wall_render.draw(view, projection, wall_physicses);
 
-        // wall.draw(view, projection, wall_positions_0, 90, glm::vec3(1.0f, 0.0f, 0.0f));
-        // wall.draw(view, projection, wall_positions_2, 90, glm::vec3(1.0f, 0.0f, 0.0f));
-        //
-        // wall.draw(view, projection, wall_positions_1, 0, glm::vec3(0.0f, 0.0f, 0.0f));
-        // wall.draw(view, projection, wall_positions_3, 0, glm::vec3(0.0f, 0.0f, 0.0f));
-
+        checkpoint_render.draw(view, projection, checkpoint_physics);
 
         glfwSwapBuffers(window);
     }

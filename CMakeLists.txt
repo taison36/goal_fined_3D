@@ -23,12 +23,17 @@ find_package(glm REQUIRED)
 
 
 add_executable(${PROJECT_NAME}
-        src/Player.h
-        src/Player.cpp
-        src/Bottom.cpp
-        src/Bottom.h
-        src/Wall.h
-        src/Wall.cpp
+
+        src/render/AffineTransform.cpp
+        src/render/CheckpointRender.cpp
+        src/render/Player.cpp
+        src/render/Bottom.cpp
+        src/render/WallRender.cpp
+
+        src/physics/CheckpointPhysics.cpp
+        src/physics/AABB.cpp
+        src/physics/WallPhysics.cpp
+
         src/main.cpp
         src/thirdparty/stb_image/stb.cpp
         src/thirdparty/glad/glad.c
