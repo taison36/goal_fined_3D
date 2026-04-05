@@ -8,6 +8,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../physics/CheckpointPhysics.h"
+#include "../physics/raycast/RayCaster.h"
+
 
 void Player::updateCameraVectors() {
     glm::vec3 new_front;
@@ -56,20 +58,21 @@ bool segmentIntersectsAABB(
 }
 
 //TODO i need to make a dedicated class for collision checking, since it might be different objects and not only #WallPhysics
-void Player::updatePlayer(float floor_y, float delta_time, std::vector<WallPhysics> const &walls,
+bool Player::updatePlayer(float floor_y, float delta_time, std::vector<WallPhysics> const &walls,
                           CheckpointPhysics &checkpoint) {
     glm::vec3 current_postion = position;
     glm::vec3 desired_position;
     float const velocity = movement_speed * delta_time;
+    bool reached_checkpoint = false;
     for (auto const &move: moves) {
         switch (move) {
-            case FORWARD: desired_position = current_postion + front * velocity;
+            case PlayerMovement::FORWARD: desired_position = current_postion + front * velocity;
                 break;
-            case BACKWARD: desired_position = current_postion - front * velocity;
+            case PlayerMovement::BACKWARD: desired_position = current_postion - front * velocity;
                 break;
-            case RIGHT: desired_position = current_postion + right * velocity;
+            case PlayerMovement::RIGHT: desired_position = current_postion + right * velocity;
                 break;
-            case LEFT: desired_position = current_postion - right * velocity;
+            case PlayerMovement::LEFT: desired_position = current_postion - right * velocity;
                 break;
         }
         bool collision = false;
@@ -82,14 +85,17 @@ void Player::updatePlayer(float floor_y, float delta_time, std::vector<WallPhysi
                 collision = true;
                 break;
             }
-            if (segmentIntersectsAABB(current_postion,
-                                      radius,
-                                      desired_position,
-                                      checkpoint.getAABB().min_vertex,
-                                      checkpoint.getAABB().max_vertex)) {
-                checkpoint.triggerCollision();
-            }
         }
+
+        if (segmentIntersectsAABB(current_postion,
+                                  radius,
+                                  desired_position,
+                                  checkpoint.getAABB().min_vertex,
+                                  checkpoint.getAABB().max_vertex)) {
+            checkpoint.triggerCollision();
+            reached_checkpoint = true;
+        }
+
         if (!collision) {
             current_postion = desired_position;
         }
@@ -97,6 +103,7 @@ void Player::updatePlayer(float floor_y, float delta_time, std::vector<WallPhysi
     position = current_postion;
     position.y = height + floor_y;
     moves.clear();
+    return reached_checkpoint;
 }
 
 
@@ -110,17 +117,17 @@ glm::vec3 Player::getPosition() {
 
 void Player::processCameraPositionMovement(PlayerMovement camera_movement) {
     switch (camera_movement) {
-        case FORWARD:
-            moves.push_back(FORWARD);
+        case PlayerMovement::FORWARD:
+            moves.push_back(PlayerMovement::FORWARD);
             break;
-        case BACKWARD:
-            moves.push_back(BACKWARD);
+        case PlayerMovement::BACKWARD:
+            moves.push_back(PlayerMovement::BACKWARD);
             break;
-        case RIGHT:
-            moves.push_back(RIGHT);
+        case PlayerMovement::RIGHT:
+            moves.push_back(PlayerMovement::RIGHT);
             break;
-        case LEFT:
-            moves.push_back(LEFT);
+        case PlayerMovement::LEFT:
+            moves.push_back(PlayerMovement::LEFT);
             break;
     }
 }
@@ -169,4 +176,33 @@ Player::Player(const glm::vec3 &position,
     camera_sensitivity(SENSITIVITY),
     movement_speed(SPEED) {
     updateCameraVectors();
+}
+
+glm::vec3 rotateAroundAxis(const glm::vec3 &v, const glm::vec3 &axis, float angle) {
+    // Rodrigues rotation formula
+    return v * cos(angle) +
+           glm::cross(axis, v) * sin(angle) +
+           axis * glm::dot(axis, v) * (1.0f - cos(angle));
+}
+
+std::vector<Ray> Player::generateRayDirections() const {
+    std::vector<Ray> rays;
+
+    // Убираем pitch — только горизонталь
+    glm::vec3 flat_front = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
+
+    for (int j = 0; j < n_rays_h; ++j) {
+        float yaw_angle = -horizontal_fov * 0.5f +
+                          j * (horizontal_fov / (n_rays_h - 1));
+
+        glm::vec3 dir = rotateAroundAxis(flat_front, world_up, yaw_angle);
+
+        rays.emplace_back(position, glm::normalize(dir));
+    }
+
+    return rays;
+}
+
+glm::vec3 Player::getFront() const {
+    return front;
 }

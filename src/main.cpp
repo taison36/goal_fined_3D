@@ -7,8 +7,10 @@
 
 #include <string>
 #include <fstream>
+#include <thread>
 
 #include "physics/CheckpointPhysics.h"
+#include "physics/raycast/RayCaster.h"
 #include "thirdparty/stb_image/stb_image.h"
 #include "thirdparty/glad/glad.h"
 
@@ -17,11 +19,14 @@
 #include "render/WallRender.h"
 #include "render/AffineTransform.h"
 #include "render/CheckpointRender.h"
+#include "RL/RlResponse.h"
+#include "RL/RLTrainData.h"
+#include "websocket/WebSocketClient.h"
 
 
 constexpr int WIDTH = 1024;
 constexpr int HEIGHT = 768;
-constexpr int FPS = 61;
+constexpr int FPS = 81;
 
 float last_x = static_cast<float>(WIDTH) / 2;
 float last_y = static_cast<float>(HEIGHT) / 2;
@@ -41,6 +46,50 @@ std::string bottom_fragment_path = "../src/shaders/bottom.frag";
 
 std::string wall_vertex_path = "../src/shaders/wall.vert";
 std::string wall_fragment_path = "../src/shaders/wall.frag";
+
+
+AABB spawn_zone(
+    glm::vec3(-1.0f, 0.5f, -1.0f),
+    glm::vec3(-10.0f, 0.5f, -7.0f)
+);
+
+std::vector<glm::vec3> floorPositions{
+    glm::vec3(0.0f),
+    glm::vec3(-8.0f, 0.0f, 0.0f)
+};
+
+std::vector<AffineTransform> affine_transforms{
+    AffineTransform(
+        glm::vec3(-4.0f, 1.9f, 0.0f),
+        glm::vec3(90.0f, 0.0f, 0.0f),
+        glm::vec3(0.829228f)
+    ),
+    AffineTransform(
+        glm::vec3(-12.0f, 1.9f, 0.0f),
+        glm::vec3(90.0f, 0.0f, 0.0f),
+        glm::vec3(0.829228f)
+    ),
+    AffineTransform(
+        glm::vec3(-4.0f, 1.9f, -8.0f),
+        glm::vec3(90.0f, 0.0f, 0.0f),
+        glm::vec3(0.829228f)
+    ),
+    AffineTransform(
+        glm::vec3(-12.0f, 1.9f, -8.0f),
+        glm::vec3(90.0f, 0.0f, 0.0f),
+        glm::vec3(0.829228f)
+    ),
+    AffineTransform(
+        glm::vec3(-16.0f, 1.9f, -4.0f),
+        glm::vec3(90.0f, 0.0f, 90.0f),
+        glm::vec3(0.829228f)
+    ),
+    AffineTransform(
+        glm::vec3(0.0f, 1.9f, -4.0f),
+        glm::vec3(90.0f, 0.0f, 90.0f),
+        glm::vec3(0.829228f)
+    )
+};
 
 void framebufferSizeCallback(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -79,25 +128,44 @@ unsigned int loadTexture(char const *path) {
     return textureID;
 }
 
+void processRLInput(RlResponse rl_response) {
+    switch (rl_response.player_move) {
+        case PlayerMovement::LEFT:
+            player.processCameraPositionMovement(PlayerMovement::LEFT);
+            break;
+        case PlayerMovement::RIGHT:
+            player.processCameraPositionMovement(PlayerMovement::RIGHT);
+            break;
+        case PlayerMovement::FORWARD:
+            player.processCameraPositionMovement(PlayerMovement::FORWARD);
+            break;
+        case PlayerMovement::BACKWARD:
+            player.processCameraPositionMovement(PlayerMovement::BACKWARD);
+            break;
+    }
+
+    player.processMouseMovement(rl_response.mouse_xoffset, 0);
+}
+
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     }
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        player.processCameraPositionMovement(FORWARD);
+        player.processCameraPositionMovement(PlayerMovement::FORWARD);
     }
 
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        player.processCameraPositionMovement(BACKWARD);
+        player.processCameraPositionMovement(PlayerMovement::BACKWARD);
     }
 
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        player.processCameraPositionMovement(LEFT);
+        player.processCameraPositionMovement(PlayerMovement::LEFT);
     }
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        player.processCameraPositionMovement(RIGHT);
+        player.processCameraPositionMovement(PlayerMovement::RIGHT);
     }
 }
 
@@ -137,7 +205,10 @@ int main() {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+#ifndef   RL_SIMULATION_
     glfwSetCursorPosCallback(window, mouseCallback);
+#endif
+
     glfwSetScrollCallback(window, scrollCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -150,43 +221,6 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
-    std::vector<glm::vec3> floorPositions{
-        glm::vec3(0.0f),
-        glm::vec3(-8.0f, 0.0f, 0.0f)
-    };
-
-    std::vector<AffineTransform> affine_transforms{
-        AffineTransform(
-            glm::vec3(-4.0f, 1.9f, 0.0f),
-            glm::vec3(90.0f, 0.0f, 0.0f),
-            glm::vec3(0.829228f)
-        ),
-        AffineTransform(
-            glm::vec3(-12.0f, 1.9f, 0.0f),
-            glm::vec3(90.0f, 0.0f, 0.0f),
-            glm::vec3(0.829228f)
-        ),
-        AffineTransform(
-            glm::vec3(-4.0f, 1.9f, -8.0f),
-            glm::vec3(90.0f, 0.0f, 0.0f),
-            glm::vec3(0.829228f)
-        ),
-        AffineTransform(
-            glm::vec3(-12.0f, 1.9f, -8.0f),
-            glm::vec3(90.0f, 0.0f, 0.0f),
-            glm::vec3(0.829228f)
-        ),
-        AffineTransform(
-            glm::vec3(-16.0f, 1.9f, -4.0f),
-            glm::vec3(90.0f, 0.0f, 90.0f),
-            glm::vec3(0.829228f)
-        ),
-        AffineTransform(
-            glm::vec3(0.0f, 1.9f, -4.0f),
-            glm::vec3(90.0f, 0.0f, 90.0f),
-            glm::vec3(0.829228f)
-        )
-    };
     Bottom bottom(floorPositions,
                   "../resources/checkered_tile_floor.glb",
                   bottom_vertex_path,
@@ -196,18 +230,11 @@ int main() {
                            wall_vertex_path,
                            wall_fragment_path);
 
-
     stbi_set_flip_vertically_on_load(false);
 
     CheckpointRender checkpoint_render("../resources/bfbbr_-_checkpoint.glb",
                                        wall_vertex_path,
                                        wall_fragment_path);
-
-
-    AABB room_aabb (
-        glm::vec3(-1.0f, 0.5f, -1.0f),
-        glm::vec3(-10.0f, 0.5f, -7.0f)
-        );
 
     CheckpointPhysics checkpoint_physics(AffineTransform(
                                              glm::vec3(-3.0f, 0.5f, -3.0f),
@@ -215,15 +242,25 @@ int main() {
                                              glm::vec3(0.2f)
                                          ),
                                          checkpoint_render.getAABB(),
-                                         room_aabb
+                                         spawn_zone
     );
 
     std::vector<WallPhysics> wall_physicses;
+    std::vector<AABB> obstecles;
     wall_physicses.reserve(affine_transforms.size());
 
     for (auto const &affine_transform: affine_transforms) {
         wall_physicses.emplace_back(affine_transform, wall_render.getAABB());
+        obstecles.push_back(wall_physicses.back().getAABB());
     }
+
+    std::string url = "localhost:8080";
+
+    ws::WebSocketClient web_socket_client(url);
+
+    std::thread ws_thread([&web_socket_client]() {
+        web_socket_client.start();
+    });
 
 
     // main loop
@@ -232,18 +269,44 @@ int main() {
         glfwPollEvents();
         double now = glfwGetTime();
         double dt = now - last_time;
+
         if (dt >= 1.0 / FPS) {
             displayFPS(dt, *window);
             last_time = now;
         } else {
             continue;
         }
+
+
+        bool reached_checkpoint = player.updatePlayer(bottom.getCommonY(), dt, wall_physicses, checkpoint_physics);
+
+        //RL Learning part
+#ifdef  RL_SIMULATION_
+        RayCaster ray_caster;
+
+        auto ray_hits = ray_caster.castAll(player.generateRayDirections(), obstecles);
+        auto opt_checkpoint_ray_hit = ray_caster.cast(player.getPosition(),
+                                                      player.getFront(),
+                                                      checkpoint_physics.getAffineTransform().getPosition(),
+                                                      obstecles,
+                                                      glm::radians(90.0f));
+
+        RLTrainData rl_data(opt_checkpoint_ray_hit, ray_hits, reached_checkpoint);
+        web_socket_client.send(rl_data.getSerialized());
+
+        RlResponse rl_response(web_socket_client.waitResponse());
+        processRLInput(rl_response);
+#endif
+
+#ifndef  RL_SIMULATION_
         processInput(window);
+#endif
+
+        //simulation
 
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        player.updatePlayer(bottom.getCommonY(), dt, wall_physicses, checkpoint_physics);
 
         glm::mat4 view = player.getView();
         glm::mat4 projection = glm::perspective(glm::radians(player.getZoom()),
